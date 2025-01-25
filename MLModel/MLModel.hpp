@@ -8,17 +8,8 @@
 #include <vector>
 
 #include <torch/csrc/inductor/aoti_runner/model_container_runner_cpu.h>
-#include <torch/torch.h>
+#include <torch/script.h>
 
-// TODO Specify kind of models and enumerate
-// Basic kind I can think of
-// 1. Core model: numberOfParticles, coord, neighbours count, neighbour list
-// 2. Descriptor model: numberOfParticles, coord, neighbours count, neighbour
-// list
-// 3. Graph model: TBA
-enum MLModelType {
-  ML_MODEL_PYTORCH,
-};
 
 /* Abstract base class for an ML model -- 'product' of the factory pattern */
 // Is this class even needed? Different ML model modes and libraries have really
@@ -27,7 +18,6 @@ class MLModel
 {
  public:
   static MLModel * create(const char * /*model_file_path*/,
-                          MLModelType /*ml_model_type*/,
                           const char * /*device_name*/,
                           int /*model_input_size*/);
 
@@ -60,11 +50,11 @@ class MLModel
                             bool clone)
       = 0;
 
-  virtual void Run(std::vector<torch::Tensor> &) = 0;
+  virtual void Run(double *, double *, double *) = 0;
 
   virtual void SetInputSize(int) = 0;
 
-  virtual ~MLModel() {};
+  virtual ~MLModel() = default;
 };
 
 // Concrete MLModel corresponding to pytorch
@@ -126,6 +116,7 @@ class PytorchModel : public MLModel
     if (requires_grad) { input_tensor.retain_grad(); }
     model_inputs_[idx] = std::move(input_tensor);
   }
+  bool warned_once_partial_energy = false;
 
  public:
   const char * model_file_path_;
@@ -138,26 +129,25 @@ class PytorchModel : public MLModel
                     double * /*input*/,
                     std::vector<std::int64_t> & /*arb size*/,
                     bool requires_grad,
-                    bool clone);
+                    bool clone) override;
 
   void SetInputNode(int /*model_input_index*/,
                     int * /*input*/,
                     std::vector<std::int64_t> & /*arb size*/,
                     bool requires_grad,
-                    bool clone);
+                    bool clone) override;
 
   void SetInputNode(int /*model_input_index*/,
                     std::int64_t * /*input*/,
                     std::vector<std::int64_t> & /*arb size*/,
                     bool requires_grad,
-                    bool clone);
+                    bool clone) override;
 
-  void SetInputSize(int);
+  void SetInputSize(int) override;
 
-  //    void Run(double * /*energy*/, double * /*forces*/);
-  void Run(std::vector<torch::Tensor> &);
+  void Run(double */*energy*/, double */*partial energy*/, double */*forces*/) override;
 
-  ~PytorchModel();
+  ~PytorchModel() override;
 };
 
 #endif /* MLMODEL_HPP */

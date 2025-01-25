@@ -6,8 +6,13 @@
 #define TORCH_EXPORT_MODEL_DRIVER_IMPLEMENTATION_HPP
 
 #include "KIM_ModelDriverHeaders.hpp"
-#include "MLModel.hpp"
-#include <torch/torch.h>
+#include <array>
+#include <set>
+#include <vector>
+// #include "MLModel.hpp"
+// #include <torch/torch.h>
+
+class MLModel;
 
 class TorchExportModelDriverImplementation
 {
@@ -93,8 +98,8 @@ class TorchExportModelDriverImplementation
   void
   preprocessInputs(KIM::ModelComputeArguments const * modelComputeArguments);
 
-  void postprocessOutputs(std::vector<torch::Tensor> &,
-                          KIM::ModelComputeArguments const *);
+  // void postprocessOutputs(std::vector<torch::Tensor> &,
+  //                         KIM::ModelComputeArguments const *);
 
   void Run(KIM::ModelComputeArguments const * modelComputeArguments);
 
@@ -122,5 +127,49 @@ class SymmetricCantorPairing
     return ((ksum * ksum - ksum % 2) + kmin) / 4;
   }
 };
+
+// Forward declaration of MLModel Class
+// This is needed as we don't want to leak any dependency from the ML model
+// to the model driver code. Sometime torch libraries interfere with the
+// compilation of the model driver.
+// Now ML model is completely isolated
+
+class MLModel
+{
+ public:
+  static MLModel * create(const char * /*model_file_path*/,
+                          const char * /*device_name*/,
+                          int /*model_input_size*/);
+
+  virtual void SetInputNode(int /*model_input_index*/,
+                            double * /*input*/,
+                            std::vector<std::int64_t> & /*arb size*/,
+                            bool requires_grad,
+                            bool clone)
+      = 0;
+
+  virtual void SetInputNode(int /*model_input_index*/,
+                            int * /*input*/,
+                            std::vector<std::int64_t> & /*arb size*/,
+                            bool requires_grad,
+                            bool clone)
+      = 0;
+
+  virtual void SetInputNode(int /*model_input_index*/,
+                            std::int64_t * /*input*/,
+                            std::vector<std::int64_t> & /*arb size*/,
+                            bool requires_grad,
+                            bool clone)
+      = 0;
+
+  virtual void
+  Run(double * /*energy*/, double * /*partial energy*/, double * /*forces*/)
+      = 0;
+
+  virtual void SetInputSize(int) = 0;
+
+  virtual ~MLModel() = default;
+};
+
 
 #endif  // TORCH_EXPORT_MODEL_DRIVER_IMPLEMENTATION_HPP

@@ -104,9 +104,6 @@ int TorchExportModelDriver::Compute(
 
 //******************************************************************************
 // static member function
-#undef KIM_LOGGER_OBJECT_NAME
-#define KIM_LOGGER_OBJECT_NAME modelComputeArgumentsCreate
-
 int TorchExportModelDriver::ComputeArgumentsCreate(
     KIM::ModelCompute const * const modelCompute,
     KIM::ModelComputeArgumentsCreate * const modelComputeArgumentsCreate)

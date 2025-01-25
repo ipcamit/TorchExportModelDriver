@@ -1,27 +1,21 @@
 #include "MLModel.hpp"
 #include <iostream>
 #include <map>
-#include <stdexcept>
 #include <string>
 
-#ifdef USE_MPI
-#include <algorithm>
-#include <mpi.h>
-#include <unistd.h>
-#endif
+// #ifdef USE_MPI
+// #include <algorithm>
+// #include <mpi.h>
+// #include <unistd.h>
+// #endif
 
 #include <torch/script.h>
 
 MLModel * MLModel::create(const char * model_file_path,
-                          MLModelType ml_model_type,
                           const char * const device_name,
                           const int model_input_size)
 {
-  if (ml_model_type == ML_MODEL_PYTORCH)
-  {
     return new PytorchModel(model_file_path, device_name, model_input_size);
-  }
-  else { throw std::invalid_argument("Model Type Not defined"); }
 }
 
 void PytorchModel::SetExecutionDevice(const char * const device_name)
@@ -151,7 +145,7 @@ void PytorchModel::SetInputNode(int idx,
 }
 
 
-void PytorchModel::Run(std::vector<torch::Tensor> & out_tensor)
+void PytorchModel::Run(double * energy, double * partial_energy, double * forces)
 {
   // FIXME: Make this work for arbitrary number/type of outputs?  This may
   // lead us to make Run() take no parameters, and instead define separate
@@ -163,7 +157,36 @@ void PytorchModel::Run(std::vector<torch::Tensor> & out_tensor)
   // the forces are the second
 
   c10::InferenceMode();
-  out_tensor = module_->run(model_inputs_);
+  std::vector<torch::Tensor> out_tensor = module_->run(model_inputs_);
+  auto energy_tensor = out_tensor[0].to(torch::kCPU);
+  auto torch_forces = out_tensor[1].to(torch::kCPU);
+
+  auto force_size = torch_forces.numel();
+
+  if (forces)
+  {
+    auto force_accessor = torch_forces.contiguous().data_ptr<double>();
+    std::memcpy(forces, force_accessor, force_size);
+  }
+
+  if (energy)
+  {
+    *energy = *(energy_tensor.sum().contiguous().data_ptr<double>());
+  }
+
+  if (partial_energy && (energy_tensor.numel() > 1)){
+    std::memcpy(partial_energy, energy_tensor.contiguous().data_ptr<double>(), energy_tensor.numel());
+  } else if (partial_energy && energy_tensor.numel() <= 1) {
+    if (!warned_once_partial_energy){
+      std::cerr << "===================================================" << std::endl;
+      std::cerr << "PARTIAL ENERGY REQUESTED, BUT NOT PROVIDED BY MODEL" << std::endl;
+      std::cerr << "===================================================" << std::endl;
+      warned_once_partial_energy = true;
+    }
+  }
+
+
+
 }
 
 PytorchModel::PytorchModel(const char * model_file_path,
