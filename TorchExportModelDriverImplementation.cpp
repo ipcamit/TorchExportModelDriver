@@ -510,12 +510,11 @@ void TorchExportModelDriverImplementation::setGraphInputs(
   // Fix for isolated atoms. Append a dummy particle, not in graph
   shape.clear();
   shape = {effectiveNumberOfParticlePointers};
-  ml_model->SetInputNode(
-      0, species_atomic_number, shape, false, true);
 
   // 2. batch tensor
   auto batch = std::vector<std::int64_t>(effectiveNumberOfParticlePointers, 0);
   ml_model->SetInputNode(1, batch.data(), shape, false, true);
+
 
   // 3. natoms
   auto natoms = std::vector<std::int64_t>{effectiveNumberOfParticlePointers};
@@ -525,12 +524,23 @@ void TorchExportModelDriverImplementation::setGraphInputs(
   // 4. atomic number tensor
   shape.clear();
   shape = {effectiveNumberOfParticlePointers};
-  ml_model->SetInputNode(3, species_atomic_number, shape, false, true);
+  ml_model->SetInputNode(
+      3, species_atomic_number, shape, false, true);
 
   // 5. edge index tensor
   shape.clear();
   shape = {2, static_cast<std::int64_t>(unrolled_graph[0].size())};
-  ml_model->SetInputNode(4, edge_index.data(), shape, false, true);
+ ; ml_model->SetInputNode(4, edge_index.data(), shape, false, true);
+;
+  // 6. edge distance tensor
+  shape.clear();
+  shape = {static_cast<std::int64_t>(unrolled_graph[0].size())};
+  ml_model->SetInputNode(5, edge_distances.data(), shape, false, true);
+
+  // 7. edge distance vector
+  shape.clear();
+  shape = {static_cast<std::int64_t>(unrolled_graph[0].size()), 3};
+  ml_model->SetInputNode(6, edge_distances_vec.data(), shape, false, true);
 }
 
 // --------------------------------------------------------------------------------
@@ -612,11 +622,11 @@ void TorchExportModelDriverImplementation::readParametersFile(
       {
         if (i + 1 != n_elements)
         {
-          // LOG_ERROR("Incorrect formatting OR number of elements");
+          LOG_ERROR("Incorrect formatting OR number of elements");
           *ier = true;
           return;
         }
-        // LOG_DEBUG("Number of elements read: " + std::to_string(i + 1));
+        LOG_DEBUG("Number of elements read: " + std::to_string(i + 1));
       }
       else { placeholder_string.erase(0, pos + 1); }
     }
@@ -676,6 +686,10 @@ void TorchExportModelDriverImplementation::readParametersFile(
     returns_forces
         = placeholder_string == "true" || placeholder_string == "True";
 
+    if (!returns_forces){
+      throw std::runtime_error("TorchExport Model driver needs the models to return forces");
+    }
+
     // blank line
     std::getline(file_ptr, placeholder_string);
     // Ignore comments
@@ -704,7 +718,7 @@ void TorchExportModelDriverImplementation::readParametersFile(
   // ----------------------------------------------------------------
   ml_model = MLModel::create("dummpy.pt",
                              std::getenv(KIM_DEVICE_ENV_VAR),
-                             7);
+                             number_of_inputs);
   LOG_INFORMATION("Loaded Torch model and set to eval");
 }
 

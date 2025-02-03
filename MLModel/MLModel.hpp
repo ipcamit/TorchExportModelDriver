@@ -11,6 +11,17 @@
 #include <torch/script.h>
 
 
+// common datatype to torch type map.
+template <typename T>
+torch::Dtype getTorchDtype() {
+    if (std::is_same<T, int>::value) return torch::kInt32;
+    if (std::is_same<T, std::int64_t>::value) return torch::kInt64;
+    if (std::is_same<T, float>::value) return torch::kFloat32;
+    if (std::is_same<T, double>::value) return torch::kFloat64;
+    throw std::runtime_error("Invalid datatype provided as input to the model");
+}
+
+
 /* Abstract base class for an ML model -- 'product' of the factory pattern */
 // Is this class even needed? Different ML model modes and libraries have really
 // different APIs, and very difficult to contain in single abstract class
@@ -71,52 +82,37 @@ class PytorchModel : public MLModel
 
   void SetExecutionDevice(const char * /*device_name*/);
 
-  template<typename T>
-  void SetInputNodeTemplate(int idx,
-                            T * data,
-                            std::vector<std::int64_t> & shape,
-                            bool requires_grad,
-                            bool clone)
-  {
-    // try to always clone, managing lifetimes can be tricky.
-    torch::TensorOptions options
-        = torch::TensorOptions().device(*device_).requires_grad(requires_grad);
-    if (std::is_same<T, int>::value)
-    {
-      options = options.dtype(torch::kInt32);  // default int is 32 bit?
-    }
-    else if (std::is_same<T, std::int64_t>::value)
-    {
-      options = options.dtype(torch::kInt64);
-    }
-    else if (std::is_same<T, double>::value)
-    {
-      options = options.dtype(torch::kFloat64);
-    }
-    else if ((std::is_same<T, double>::value
-              && get_torch_default_floating_type() == torch::kFloat32)
-             || std::is_same<T, float>::value)
-    {
-      options = options.dtype(torch::kFloat32);
-    }
-    else
-    {
-      throw std::runtime_error(
-          "Invalid datatype provided as input to the model");
-    }
-    torch::Tensor input_tensor;
-    // clone by default, avoid tricky memory lifetimes of tensors
-    if (clone)
-    {
-      input_tensor = torch::from_blob(data, shape, options).clone();
-    }
-    else { input_tensor = torch::from_blob(data, shape, options); }
+template<typename T>
+void SetInputNodeTemplate(int idx,
+                          T * data,
+                          std::vector<std::int64_t> & shape,
+                          bool requires_grad,
+                          bool clone)
+{
+  // Configure tensor options
+  torch::TensorOptions options = torch::TensorOptions()
+                                     .device(*device_)
+                                     .dtype(getTorchDtype<T>())
+                                     .requires_grad(requires_grad);
 
-    // torch bug workaround
-    if (requires_grad) { input_tensor.retain_grad(); }
-    model_inputs_[idx] = std::move(input_tensor);
+  // Create tensor (clone if necessary)
+  torch::Tensor input_tensor = torch::from_blob(data, shape, options);
+  if (clone) input_tensor = input_tensor.clone();
+
+  // Convert floating-point types if necessary
+  if ((std::is_floating_point<T>::value)
+      && (input_tensor.dtype() != get_torch_default_floating_type()))
+  {
+    input_tensor = input_tensor.to(get_torch_default_floating_type());
   }
-  bool warned_once_partial_energy = false;
+
+  // Workaround for PyTorch bug
+  if (requires_grad) input_tensor.retain_grad();
+
+  model_inputs_.push_back(input_tensor);
+}
+
+bool warned_once_partial_energy = false;
 
  public:
   const char * model_file_path_;

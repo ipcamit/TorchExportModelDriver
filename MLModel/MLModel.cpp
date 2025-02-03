@@ -114,7 +114,7 @@ torch::Dtype PytorchModel::get_torch_data_type(int *)
 
 torch::Dtype PytorchModel::get_torch_default_floating_type()
 {
-  return torch::kFloat32;
+  return torch::kFloat32; // smarter way to assign it? perhaps from model
 }
 
 void PytorchModel::SetInputNode(int idx,
@@ -157,9 +157,51 @@ void PytorchModel::Run(double * energy, double * partial_energy, double * forces
   // the forces are the second
 
   c10::InferenceMode();
-  std::vector<torch::Tensor> out_tensor = module_->run(model_inputs_);
+  // std::cout << model_inputs_[0];
+  std::cout << "Running model\n";
+  //TEST
+
+    // #include "/home/amit/Projects/COLABFIT/TorchExport/data_new.cpp"
+    // auto pos_tensor = torch::from_blob(pos, pos_shape);
+    // auto batch_tensor = torch::from_blob(batch, batch_shape);
+    // auto natoms_tensor = torch::from_blob(natoms, natoms_shape);
+    // auto atomic_numbers_tensor = torch::from_blob(atomic_numbers, atomic_numbers_shape);
+    // auto edge_index_tensor = torch::from_blob(edge_index, edge_index_shape);
+    // auto edge_distance_tensor = torch::from_blob(edge_distance, edge_distance_shape);
+    // auto edge_distance_vec_tensor = torch::from_blob(edge_distance_vec, edge_distance_vec_shape);
+    // std::vector<torch::Tensor> inputs;
+
+    // inputs.push_back(pos_tensor);
+    // inputs.push_back(batch_tensor);
+    // inputs.push_back(natoms_tensor);
+    // inputs.push_back(atomic_numbers_tensor);
+    // inputs.push_back(edge_index_tensor);
+    // inputs.push_back(edge_distance_tensor);
+    // inputs.push_back(edge_distance_vec_tensor);
+
+    // for (std::size_t i = 0; i < model_inputs_.size(); i++){
+    //   std::cout << model_inputs_[i] << "\n";
+    //
+    // }
+
+    std::cout << std::endl;
+
+    std::vector<torch::Tensor> out_tensor;
+    try
+    {
+      out_tensor = module_->run(model_inputs_);
+    } catch (const c10::Error & e) {
+      std::cerr << "PyTorch Error: " << e.what() << std::endl;
+    }
+
+  std::cout << "Ran model\n";
   auto energy_tensor = out_tensor[0].to(torch::kCPU);
   auto torch_forces = out_tensor[1].to(torch::kCPU);
+
+  std::cout << energy_tensor;
+
+  energy_tensor = energy_tensor.to(torch::kFloat64);
+  torch_forces = torch_forces.to(torch::kFloat64);
 
   auto force_size = torch_forces.numel();
 
@@ -201,6 +243,7 @@ PytorchModel::PytorchModel(const char * model_file_path,
     std::cout << "Loading HARDCODED MODEL ESCN\n";
     module_ = std::make_unique<torch::inductor::AOTIModelContainerRunnerCpu>(
         "escn.so");
+    std::cout << "LOADED\n";
   }
   catch (const c10::Error & e)
   {
@@ -219,6 +262,7 @@ PytorchModel::PytorchModel(const char * model_file_path,
   // coordinates, number_of_neighbors, neighbor_list)
   // Model inputs to be determined
   // model_inputs_.resize(size_); // Can use push_back now
+  // SetInputSize(size_);
 
   // Set model to evaluation mode to set any dropout or batch normalization
   // layers to evaluation mode
@@ -245,6 +289,9 @@ PytorchModel::PytorchModel(const char * model_file_path,
 //     out_tensor = model_inputs_[index];
 // }
 
-void PytorchModel::SetInputSize(int size) { model_inputs_.resize(size); }
+void PytorchModel::SetInputSize(int size) {
+
+  std::cout << "SETUP INPUT SIZE\n";
+  model_inputs_.resize(size); }
 
 PytorchModel::~PytorchModel() { delete device_; }
