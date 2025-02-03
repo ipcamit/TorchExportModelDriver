@@ -12,13 +12,14 @@
 
 
 // common datatype to torch type map.
-template <typename T>
-torch::Dtype getTorchDtype() {
-    if (std::is_same<T, int>::value) return torch::kInt32;
-    if (std::is_same<T, std::int64_t>::value) return torch::kInt64;
-    if (std::is_same<T, float>::value) return torch::kFloat32;
-    if (std::is_same<T, double>::value) return torch::kFloat64;
-    throw std::runtime_error("Invalid datatype provided as input to the model");
+template<typename T>
+torch::Dtype getTorchDtype()
+{
+  if (std::is_same<T, int>::value) return torch::kInt32;
+  if (std::is_same<T, std::int64_t>::value) return torch::kInt64;
+  if (std::is_same<T, float>::value) return torch::kFloat32;
+  if (std::is_same<T, double>::value) return torch::kFloat64;
+  throw std::runtime_error("Invalid datatype provided as input to the model");
 }
 
 
@@ -82,37 +83,37 @@ class PytorchModel : public MLModel
 
   void SetExecutionDevice(const char * /*device_name*/);
 
-template<typename T>
-void SetInputNodeTemplate(int idx,
-                          T * data,
-                          std::vector<std::int64_t> & shape,
-                          bool requires_grad,
-                          bool clone)
-{
-  // Configure tensor options
-  torch::TensorOptions options = torch::TensorOptions()
-                                     .device(*device_)
-                                     .dtype(getTorchDtype<T>())
-                                     .requires_grad(requires_grad);
-
-  // Create tensor (clone if necessary)
-  torch::Tensor input_tensor = torch::from_blob(data, shape, options);
-  if (clone) input_tensor = input_tensor.clone();
-
-  // Convert floating-point types if necessary
-  if ((std::is_floating_point<T>::value)
-      && (input_tensor.dtype() != get_torch_default_floating_type()))
+  template<typename T>
+  void SetInputNodeTemplate(int idx,
+                            T * data,
+                            std::vector<std::int64_t> & shape,
+                            bool requires_grad,
+                            bool clone)
   {
-    input_tensor = input_tensor.to(get_torch_default_floating_type());
+    // Configure tensor options
+    torch::TensorOptions options = torch::TensorOptions()
+                                       .device(*device_)
+                                       .dtype(getTorchDtype<T>())
+                                       .requires_grad(requires_grad);
+
+    // Create tensor (clone if necessary)
+    torch::Tensor input_tensor = torch::from_blob(data, shape, options);
+    if (clone) input_tensor = input_tensor.clone();
+
+    // Convert floating-point types if necessary
+    if ((std::is_floating_point<T>::value)
+        && (input_tensor.dtype() != get_torch_default_floating_type()))
+    {
+      input_tensor = input_tensor.to(get_torch_default_floating_type());
+    }
+
+    // Workaround for PyTorch bug
+    if (requires_grad) input_tensor.retain_grad();
+
+    model_inputs_.push_back(input_tensor);
   }
 
-  // Workaround for PyTorch bug
-  if (requires_grad) input_tensor.retain_grad();
-
-  model_inputs_.push_back(input_tensor);
-}
-
-bool warned_once_partial_energy = false;
+  bool warned_once_partial_energy = false;
 
  public:
   const char * model_file_path_;
@@ -141,7 +142,9 @@ bool warned_once_partial_energy = false;
 
   void SetInputSize(int) override;
 
-  void Run(double */*energy*/, double */*partial energy*/, double */*forces*/) override;
+  void Run(double * /*energy*/,
+           double * /*partial energy*/,
+           double * /*forces*/) override;
 
   ~PytorchModel() override;
 };
