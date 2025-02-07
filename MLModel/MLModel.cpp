@@ -20,7 +20,11 @@ MLModel * MLModel::create(const char * model_file_path,
 
 void PytorchModel::SetExecutionDevice(const char * const device_name)
 {
-  device_ = new torch::Device("cpu");
+  if (device_name)
+    device_ = new torch::Device(device_name);
+  else {
+    device_ = new torch::Device("cpu");
+  }
 }
 //    // Use the requested device name char array to create a torch Device
 //    // object.  Generally, the ``device_name`` parameter is going to come
@@ -189,7 +193,7 @@ void PytorchModel::Run(double * energy, double * partial_energy, double * forces
     std::vector<torch::Tensor> out_tensor;
     try
     {
-      out_tensor = module_->run(model_inputs_);
+      out_tensor = module_->Run(model_inputs_);
     } catch (const c10::Error & e) {
       std::cerr << "PyTorch Error: " << e.what() << std::endl;
     }

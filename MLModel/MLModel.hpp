@@ -69,11 +69,37 @@ class MLModel
   virtual ~MLModel() = default;
 };
 
+class AOTInductorModelContainer{
+ public:
+  virtual std::vector<torch::Tensor> Run(std::vector<torch::Tensor>&) =0 ;
+  virtual ~AOTInductorModelContainer() = default;
+};
+
+class AOTInductorModelContainerCPU: public AOTInductorModelContainer{
+ private:
+  torch::inductor::AOTIModelContainerRunnerCpu torch_module;
+ public:
+  std::vector<torch::Tensor> Run(std::vector<torch::Tensor> & inputs) override{
+    return torch_module.run(inputs);
+  }
+  AOTInductorModelContainerCPU(const std::string &model_path): torch_module(model_path){};
+};
+
+class AOTInductorModelContainerGPU: public AOTInductorModelContainer{
+ private:
+  torch::inductor::AOTIModelContainerRunner torch_module;
+ public:
+  std::vector<torch::Tensor> Run(std::vector<torch::Tensor>& inputs) override {
+    return torch_module.run(inputs);
+  }
+  AOTInductorModelContainerGPU(const std::string &model_path): torch_module(model_path){};
+};
+
 // Concrete MLModel corresponding to pytorch
 class PytorchModel : public MLModel
 {
  private:
-  std::unique_ptr<torch::inductor::AOTIModelContainerRunnerCpu> module_;
+  std::unique_ptr<AOTInductorModelContainer> module_;
   std::vector<torch::Tensor> model_inputs_;
   torch::Device * device_;  // TODO: Is this needed? Now CPU and GPU models are
                             // differently loaded
