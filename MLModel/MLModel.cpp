@@ -158,7 +158,7 @@ void PytorchModel::Run(double * energy, double * partial_energy, double * forces
 
   c10::InferenceMode();
   // std::cout << model_inputs_[0];
-  std::cout << "Running model\n";
+  // std::cout << "Running model\n";
   //TEST
 
     // #include "/home/amit/Projects/COLABFIT/TorchExport/data_new.cpp"
@@ -184,7 +184,7 @@ void PytorchModel::Run(double * energy, double * partial_energy, double * forces
     //
     // }
 
-    std::cout << std::endl;
+    // std::cout << std::endl;
 
     std::vector<torch::Tensor> out_tensor;
     try
@@ -194,11 +194,11 @@ void PytorchModel::Run(double * energy, double * partial_energy, double * forces
       std::cerr << "PyTorch Error: " << e.what() << std::endl;
     }
 
-  std::cout << "Ran model\n";
+  // std::cout << "Ran model\n";
   auto energy_tensor = out_tensor[0].to(torch::kCPU);
   auto torch_forces = out_tensor[1].to(torch::kCPU);
 
-  std::cout << energy_tensor;
+  // std::cout << energy_tensor;
 
   energy_tensor = energy_tensor.to(torch::kFloat64);
   torch_forces = torch_forces.to(torch::kFloat64);
@@ -215,6 +215,9 @@ void PytorchModel::Run(double * energy, double * partial_energy, double * forces
   {
     *energy = *(energy_tensor.sum().contiguous().data_ptr<double>());
   }
+
+  model_inputs_.clear();
+  // model_inputs_.reserve(7);
 
   if (partial_energy && (energy_tensor.numel() > 1)){
     std::memcpy(partial_energy, energy_tensor.contiguous().data_ptr<double>(), energy_tensor.numel());
@@ -240,10 +243,9 @@ PytorchModel::PytorchModel(const char * model_file_path,
   try
   {
     // Deserialize the ScriptModule from a file using torch::jit::load().
-    std::cout << "Loading HARDCODED MODEL ESCN\n";
+    // std::cout << "Loading EXPERIMENTAL MODEL ESCN\n";
     module_ = std::make_unique<torch::inductor::AOTIModelContainerRunnerCpu>(
-        "escn.so");
-    std::cout << "LOADED\n";
+        "/home/amit/Projects/COLABFIT/TorchExport/escn.so");
   }
   catch (const c10::Error & e)
   {
@@ -290,8 +292,6 @@ PytorchModel::PytorchModel(const char * model_file_path,
 // }
 
 void PytorchModel::SetInputSize(int size) {
-
-  std::cout << "SETUP INPUT SIZE\n";
   model_inputs_.resize(size); }
 
 PytorchModel::~PytorchModel() { delete device_; }
