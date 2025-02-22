@@ -2,12 +2,15 @@
 #define MLMODEL_HPP
 
 #include <cstdlib>
-#include <memory>
+#include <memory>  // std::unique_ptr
 #include <string>
-#include <type_traits>
+#include <type_traits>  // std::is_same
 #include <vector>
 
 #include <torch/csrc/inductor/aoti_runner/model_container_runner_cpu.h>
+#ifndef CPU_ONLY  // exclude cuda runner if CPU only requested
+#include <torch/csrc/inductor/aoti_runner/model_container_runner_cuda.h>
+#endif
 #include <torch/script.h>
 
 
@@ -29,18 +32,10 @@ torch::Dtype getTorchDtype()
 class MLModel
 {
  public:
-  static MLModel * create(const char * /*model_file_path*/,
-                          const char * /*device_name*/,
+  static MLModel * create(const std::string & /*model_file_path*/,
+                          const std::string & /*device_name*/,
                           int /*model_input_size*/);
 
-  // TODO: Should we use named inputs instead?  I believe they're required
-  // by ONNX, but not sure exactly how they work vis-a-vis exporting to a
-  // torchscript file.
-
-  // Function templates can't be used for pure virtual functions, and since
-  // SetInputNode and Run each have their own (different) support argument
-  // types, we can't use a class template.  So, we explicitly define each
-  // supported overloading.
   virtual void SetInputNode(int /*model_input_index*/,
                             double * /*input*/,
                             std::vector<std::int64_t> & /*arb size*/,
@@ -64,50 +59,87 @@ class MLModel
 
   virtual void Run(double *, double *, double *) = 0;
 
-  virtual void SetInputSize(int) = 0;
-
   virtual ~MLModel() = default;
 };
 
-class AOTInductorModelContainer{
+/* Abstracted AOTInductor container for future proofing. It is rapidly changing
+ * API.
+ */
+class AOTInductorModelContainer
+{
  public:
-  virtual std::vector<torch::Tensor> Run(std::vector<torch::Tensor>&) =0 ;
+  virtual std::vector<torch::Tensor> Run(std::vector<torch::Tensor> &) = 0;
   virtual ~AOTInductorModelContainer() = default;
+  static std::unique_ptr<AOTInductorModelContainer>
+  load_inductor_container(const std::string & so_path,
+                          const std::string & device);
 };
 
-class AOTInductorModelContainerCPU: public AOTInductorModelContainer{
+// This is how torch 2.4 was running the containers, but apparently it is
+// changed now? TODO: Update it with respect to latest version. 2.6 onwards
+
+class AOTInductorModelContainerCPU : public AOTInductorModelContainer
+{
  private:
   torch::inductor::AOTIModelContainerRunnerCpu torch_module;
+
  public:
-  std::vector<torch::Tensor> Run(std::vector<torch::Tensor> & inputs) override{
+  std::vector<torch::Tensor> Run(std::vector<torch::Tensor> & inputs) override
+  {
     return torch_module.run(inputs);
   }
-  AOTInductorModelContainerCPU(const std::string &model_path): torch_module(model_path){};
+  AOTInductorModelContainerCPU(const std::string & model_path) :
+      torch_module(model_path) {};
 };
 
-class AOTInductorModelContainerGPU: public AOTInductorModelContainer{
+class AOTInductorModelContainerGPU : public AOTInductorModelContainer
+{
+#ifndef CPU_ONLY
  private:
-  torch::inductor::AOTIModelContainerRunner torch_module;
+  torch::inductor::AOTIModelContainerRunnerCuda torch_module;
+
  public:
-  std::vector<torch::Tensor> Run(std::vector<torch::Tensor>& inputs) override {
+  AOTInductorModelContainerGPU(const std::string & model_path) :
+      torch_module(model_path)
+  {
+  }
+
+  std::vector<torch::Tensor> Run(std::vector<torch::Tensor> & inputs) override
+  {
     return torch_module.run(inputs);
   }
-  AOTInductorModelContainerGPU(const std::string &model_path): torch_module(model_path){};
+#else
+ public:
+  AOTInductorModelContainerGPU(const std::string & model_path)
+  {
+    throw std::runtime_error(
+        "Request to run GPU exported model, but the TorchExport driver was "
+        "compiled with only CPU support (-DCPU_ONLY)");
+  }
+
+  std::vector<torch::Tensor> Run(std::vector<torch::Tensor> & inputs) override
+  {
+    throw std::runtime_error(
+        "Run() called on GPU model, but compiled with CPU-only support.");
+  }
+#endif
 };
+
 
 // Concrete MLModel corresponding to pytorch
 class PytorchModel : public MLModel
 {
  private:
   std::unique_ptr<AOTInductorModelContainer> module_;
+  int model_input_size;
   std::vector<torch::Tensor> model_inputs_;
-  torch::Device * device_;  // TODO: Is this needed? Now CPU and GPU models are
-                            // differently loaded
+  std::unique_ptr<torch::Device> device_;
+
 
   torch::Dtype get_torch_data_type(int *);
   torch::Dtype get_torch_default_floating_type();
 
-  void SetExecutionDevice(const char * /*device_name*/);
+  void SetExecutionDevice(const std::string & /*device_name*/);
 
   template<typename T>
   void SetInputNodeTemplate(int idx,
@@ -142,10 +174,10 @@ class PytorchModel : public MLModel
   bool warned_once_partial_energy = false;
 
  public:
-  const char * model_file_path_;
+  const std::string model_file_path_;
 
-  PytorchModel(const char * /*model_file_path*/,
-               const char * /*device_name*/,
+  PytorchModel(const std::string & /*model_file_path*/,
+               const std::string & /*device_name*/,
                int /*input size*/);
 
   void SetInputNode(int /*model_input_index*/,
@@ -166,7 +198,6 @@ class PytorchModel : public MLModel
                     bool requires_grad,
                     bool clone) override;
 
-  void SetInputSize(int) override;
 
   void Run(double * /*energy*/,
            double * /*partial energy*/,

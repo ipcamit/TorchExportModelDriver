@@ -11,21 +11,24 @@
 
 #include <torch/script.h>
 
-MLModel * MLModel::create(const char * model_file_path,
-                          const char * const device_name,
+MLModel * MLModel::create(const std::string & model_file_path,
+                          const std::string & device_name,
                           const int model_input_size)
 {
-    return new PytorchModel(model_file_path, device_name, model_input_size);
+  return new PytorchModel(model_file_path, device_name, model_input_size);
 }
 
-void PytorchModel::SetExecutionDevice(const char * const device_name)
+void PytorchModel::SetExecutionDevice(const std::string & device_name)
 {
-  if (device_name)
-    device_ = new torch::Device(device_name);
-  else {
-    device_ = new torch::Device("cpu");
-  }
+  if (!device_name.empty())
+    device_ = std::make_unique<torch::Device>(device_name);
+  else { device_ = std::make_unique<torch::Device>("cpu"); }
 }
+
+/*
+ * This is not used right now, but leaving it commented out for now, as in
+ * future it will be needed for proper device allocation on multi GPU platform.
+ */
 //    // Use the requested device name char array to create a torch Device
 //    // object.  Generally, the ``device_name`` parameter is going to come
 //    // from a call to std::getenv(), so it is defined as const.
@@ -118,7 +121,7 @@ torch::Dtype PytorchModel::get_torch_data_type(int *)
 
 torch::Dtype PytorchModel::get_torch_default_floating_type()
 {
-  return torch::kFloat32; // smarter way to assign it? perhaps from model
+  return torch::kFloat32;  // smarter way to assign it? perhaps from model
 }
 
 void PytorchModel::SetInputNode(int idx,
@@ -149,56 +152,22 @@ void PytorchModel::SetInputNode(int idx,
 }
 
 
-void PytorchModel::Run(double * energy, double * partial_energy, double * forces)
+void PytorchModel::Run(double * energy,
+                       double * partial_energy,
+                       double * forces)
 {
-  // FIXME: Make this work for arbitrary number/type of outputs?  This may
-  // lead us to make Run() take no parameters, and instead define separate
-  // methods for accessing each of the outputs of the ML model.
-
-  // Run ML model's `forward` method and retrieve outputs as tuple
-  // IMPORTANT: We require that the pytorch model's `forward`
-  // method return a tuple where the energy is the first entry and
-  // the forces are the second
-
   c10::InferenceMode();
-  // std::cout << model_inputs_[0];
-  std::cout << "Running model\n";
-  //TEST
+  std::vector<torch::Tensor> out_tensor;
 
-    // #include "/home/amit/Projects/COLABFIT/TorchExport/data_new.cpp"
-    // auto pos_tensor = torch::from_blob(pos, pos_shape);
-    // auto batch_tensor = torch::from_blob(batch, batch_shape);
-    // auto natoms_tensor = torch::from_blob(natoms, natoms_shape);
-    // auto atomic_numbers_tensor = torch::from_blob(atomic_numbers, atomic_numbers_shape);
-    // auto edge_index_tensor = torch::from_blob(edge_index, edge_index_shape);
-    // auto edge_distance_tensor = torch::from_blob(edge_distance, edge_distance_shape);
-    // auto edge_distance_vec_tensor = torch::from_blob(edge_distance_vec, edge_distance_vec_shape);
-    // std::vector<torch::Tensor> inputs;
+  try
+  {
+    out_tensor = module_->Run(model_inputs_);
+  }
+  catch (const c10::Error & e)
+  {
+    std::cerr << "PyTorch Error: " << e.what() << std::endl;
+  }
 
-    // inputs.push_back(pos_tensor);
-    // inputs.push_back(batch_tensor);
-    // inputs.push_back(natoms_tensor);
-    // inputs.push_back(atomic_numbers_tensor);
-    // inputs.push_back(edge_index_tensor);
-    // inputs.push_back(edge_distance_tensor);
-    // inputs.push_back(edge_distance_vec_tensor);
-
-    // for (std::size_t i = 0; i < model_inputs_.size(); i++){
-    //   std::cout << model_inputs_[i] << "\n";
-    //
-    // }
-
-    std::cout << std::endl;
-
-    std::vector<torch::Tensor> out_tensor;
-    try
-    {
-      out_tensor = module_->Run(model_inputs_);
-    } catch (const c10::Error & e) {
-      std::cerr << "PyTorch Error: " << e.what() << std::endl;
-    }
-
-  std::cout << "Ran model\n";
   auto energy_tensor = out_tensor[0].to(torch::kCPU);
   auto torch_forces = out_tensor[1].to(torch::kCPU);
 
@@ -220,34 +189,37 @@ void PytorchModel::Run(double * energy, double * partial_energy, double * forces
     *energy = *(energy_tensor.sum().contiguous().data_ptr<double>());
   }
 
-  if (partial_energy && (energy_tensor.numel() > 1)){
-    std::memcpy(partial_energy, energy_tensor.contiguous().data_ptr<double>(), energy_tensor.numel());
-  } else if (partial_energy && energy_tensor.numel() <= 1) {
-    if (!warned_once_partial_energy){
-      std::cerr << "===================================================" << std::endl;
-      std::cerr << "PARTIAL ENERGY REQUESTED, BUT NOT PROVIDED BY MODEL" << std::endl;
-      std::cerr << "===================================================" << std::endl;
+  if (partial_energy && (energy_tensor.numel() > 1))
+  {
+    std::memcpy(partial_energy,
+                energy_tensor.contiguous().data_ptr<double>(),
+                energy_tensor.numel());
+  }
+  else if (partial_energy && energy_tensor.numel() <= 1)
+  {
+    if (!warned_once_partial_energy)
+    {
+      std::cerr << "==================================================="
+                << std::endl;
+      std::cerr << "PARTIAL ENERGY REQUESTED, BUT NOT PROVIDED BY MODEL"
+                << std::endl;
+      std::cerr << "==================================================="
+                << std::endl;
       warned_once_partial_energy = true;
     }
   }
-
-
-
 }
 
-PytorchModel::PytorchModel(const char * model_file_path,
-                           const char * device_name,
-                           const int size_)
+PytorchModel::PytorchModel(const std::string & model_file_path,
+                           const std::string & device_name,
+                           const int size_) :
+    model_input_size(size_), model_file_path_(model_file_path)
 {
-  model_file_path_ = model_file_path;
   SetExecutionDevice(device_name);
   try
   {
-    // Deserialize the ScriptModule from a file using torch::jit::load().
-    std::cout << "Loading HARDCODED MODEL ESCN\n";
-    module_ = std::make_unique<torch::inductor::AOTIModelContainerRunnerCpu>(
-        "escn.so");
-    std::cout << "LOADED\n";
+    module_ = AOTInductorModelContainer::load_inductor_container(
+        model_file_path, device_name);
   }
   catch (const c10::Error & e)
   {
@@ -256,46 +228,20 @@ PytorchModel::PytorchModel(const char * model_file_path,
               << model_file_path << std::endl;
     throw;
   }
-
-  //    SetExecutionDevice(device_name); // Not needed yet
-
-  // Copy model to execution device
-  // module_.to(*device_);
-
-  // Reserve size for the four fixed model inputs (particle_contributing,
-  // coordinates, number_of_neighbors, neighbor_list)
-  // Model inputs to be determined
-  // model_inputs_.resize(size_); // Can use push_back now
-  // SetInputSize(size_);
-
-  // Set model to evaluation mode to set any dropout or batch normalization
-  // layers to evaluation mode
-  // module_.eval();
-  // module_ = torch::jit::freeze(module_);
-
-  // torch::jit::FusionStrategy strategy;
-  // strategy = {{torch::jit::FusionBehavior::DYNAMIC, 3}};
-  // torch::jit::setFusionStrategy(strategy);
 }
 
-// void PytorchModel::GetInputNode(std::vector<torch::Tensor> &out_tensor) {
-// return first tensor with grad = True
-// for (auto &Ival: model_inputs_) {
-//     if (Ival.toTensor().requires_grad()) {
-//         out_tensor = Ival;
-//         return;
-//     }
-// }
-// }
 
-// void PytorchModel::GetInputNode(int index, torch::Tensor &out_tensor) {
-//     // return first tensor with grad = True
-//     out_tensor = model_inputs_[index];
-// }
+PytorchModel::~PytorchModel() = default;
+std::unique_ptr<AOTInductorModelContainer>
+AOTInductorModelContainer::load_inductor_container(const std::string & so_path,
+                                                   const std::string & device)
+{
+  if (device == "cpu")
+    return std::make_unique<AOTInductorModelContainerCPU>(so_path);
+  else if (device == "cuda")
+    return std::make_unique<AOTInductorModelContainerGPU>(so_path);
+  else
+    std::runtime_error("Device: " + device + " not supported");
 
-void PytorchModel::SetInputSize(int size) {
-
-  std::cout << "SETUP INPUT SIZE\n";
-  model_inputs_.resize(size); }
-
-PytorchModel::~PytorchModel() { delete device_; }
+  return nullptr;  // added to silence the static analyzer
+}
