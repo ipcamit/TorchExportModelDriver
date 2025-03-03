@@ -25,9 +25,6 @@ set_property(TARGET ${PROJECT_NAME} PROPERTY CXX_STANDARD 17)
 #link_directories(/home/amit/Projects/COLABFIT/TorchExport)
 target_link_libraries(${PROJECT_NAME} PRIVATE MLModel)
 
-
-
-
 set(CMAKE_INSTALL_RPATH_USE_LINK_PATH TRUE)
 set(CMAKE_BUILD_WITH_INSTALL_RPATH TRUE)
 #set(CMAKE_INSTALL_RPATH "/home/amit/Projects/COLABFIT/TorchExport")

@@ -9,8 +9,7 @@ add_compile_options(-std=c++17)
 #list(APPEND CMAKE_PREFIX_PATH $ENV{TORCH_ROOT})
 find_package(Torch REQUIRED)
 
-add_library(${ML_RUNTIME_TARGET_LIB} STATIC MLModel.cpp
-        ../yaml.hpp)
+add_library(${ML_RUNTIME_TARGET_LIB} STATIC MLModel.cpp)
 
 set_property(TARGET ${ML_RUNTIME_TARGET_LIB} PROPERTY POSITION_INDEPENDENT_CODE ON)
 set_property(TARGET ${ML_RUNTIME_TARGET_LIB} PROPERTY CXX_STANDARD 17)
@@ -23,3 +22,10 @@ target_include_directories(MLModel PRIVATE ${TORCH_INCLUDE_DIRS})
 #target_link_libraries("${PROJECT_NAME}" PRIVATE MLModel PRIVATE ${TORCH_LIBRARIES})
 #target_link_libraries("${PROJECT_NAME}" PUBLIC "/home/amit/Projects/COLABFIT/TorchExport/escn.so")
 # set_property(TARGET ${PROJECT_NAME} PROPERTY CXX_STANDARD 17)
+find_package(CUDA)
+
+if (NOT FOUND_CUDA)
+    message("CUDA NOT FOUND, USING CPU ONLY VERSION.")
+    set(CMAKE_CXX_FLAGS  "${CMAKE_CXX_FLAGS} -DCPU_ONLY")
+endif()
+
