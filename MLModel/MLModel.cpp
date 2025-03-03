@@ -225,7 +225,8 @@ PytorchModel::PytorchModel(const std::string & model_file_path,
   catch (const c10::Error & e)
   {
     std::string err("ERROR: An error occurred while attempting to load the "
-                 "pytorch model file from path " + model_file_path);
+                    "pytorch model file from path "
+                    + model_file_path);
     throw std::runtime_error(err);
   }
 }
