@@ -9,8 +9,6 @@
 // #include <unistd.h>
 // #endif
 
-#include <torch/script.h>
-
 MLModel * MLModel::create(const std::string & model_file_path,
                           const std::string & device_name,
                           const int model_input_size)
@@ -156,7 +154,7 @@ void PytorchModel::Run(double * energy,
                        double * partial_energy,
                        double * forces)
 {
-  c10::InferenceMode();
+  c10::InferenceMode guard(true);
   std::vector<torch::Tensor> out_tensor;
 
   try
@@ -208,6 +206,9 @@ void PytorchModel::Run(double * energy,
       warned_once_partial_energy = true;
     }
   }
+
+  model_inputs_.clear();
+  model_inputs_.reserve(model_input_size);
 }
 
 PytorchModel::PytorchModel(const std::string & model_file_path,
@@ -223,10 +224,9 @@ PytorchModel::PytorchModel(const std::string & model_file_path,
   }
   catch (const c10::Error & e)
   {
-    std::cerr << "ERROR: An error occurred while attempting to load the "
-                 "pytorch model file from path "
-              << model_file_path << std::endl;
-    throw;
+    std::string err("ERROR: An error occurred while attempting to load the "
+                 "pytorch model file from path " + model_file_path);
+    throw std::runtime_error(err);
   }
 }
 
@@ -241,7 +241,5 @@ AOTInductorModelContainer::load_inductor_container(const std::string & so_path,
   else if (device == "cuda")
     return std::make_unique<AOTInductorModelContainerGPU>(so_path);
   else
-    std::runtime_error("Device: " + device + " not supported");
-
-  return nullptr;  // added to silence the static analyzer
+    throw std::runtime_error("Device: " + device + " not supported");
 }

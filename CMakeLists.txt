@@ -21,7 +21,7 @@ target_sources(${PROJECT_NAME} PRIVATE
 
 add_subdirectory(MLModel)
 
-set_property(TARGET ${PROJECT_NAME} PROPERTY CXX_STANDARD 11)
+set_property(TARGET ${PROJECT_NAME} PROPERTY CXX_STANDARD 17)
 #link_directories(/home/amit/Projects/COLABFIT/TorchExport)
 target_link_libraries(${PROJECT_NAME} PRIVATE MLModel)
 

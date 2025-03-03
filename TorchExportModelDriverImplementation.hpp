@@ -9,10 +9,11 @@
 #include <array>
 #include <set>
 #include <vector>
+#include <memory>
 // #include "MLModel.hpp"
 // #include <torch/torch.h>
 
-class MLModel;
+class MLModel; // fwd decl
 
 class TorchExportModelDriverImplementation
 {
@@ -23,9 +24,6 @@ class TorchExportModelDriverImplementation
   std::vector<std::string> elements_list;
   std::string preprocessing;
   std::string model_name;
-  bool returns_forces;
-  std::string descriptor_name = "None";
-  std::string descriptor_param_file = "None";
 
   TorchExportModelDriverImplementation(
       KIM::ModelDriverCreate * modelDriverCreate,
@@ -54,8 +52,8 @@ class TorchExportModelDriverImplementation
   int modelWillNotRequestNeighborsOfNoncontributingParticles_;
   int n_contributing_atoms;
   int number_of_inputs;
-  int64_t * species_atomic_number;
-  int64_t * contraction_array;
+  std::int64_t * species_atomic_number;
+  std::int64_t * contraction_array;
 
   MLModel * ml_model;
 
@@ -63,8 +61,7 @@ class TorchExportModelDriverImplementation
   std::vector<int> neighbor_list;
   std::vector<int> z_map;
 
-  double * descriptor_array;
-  long ** graph_edge_indices;
+  std::int64_t * graph_edge_indices;
 
   void
   updateNeighborList(KIM::ModelComputeArguments const * modelComputeArguments,
@@ -72,9 +69,6 @@ class TorchExportModelDriverImplementation
 
   void
   setDefaultInputs(const KIM::ModelComputeArguments * modelComputeArguments);
-
-  // void setDescriptorInputs(const KIM::ModelComputeArguments
-  // *modelComputeArguments);
 
   void setGraphInputs(const KIM::ModelComputeArguments * modelComputeArguments);
 
@@ -98,15 +92,12 @@ class TorchExportModelDriverImplementation
   void
   preprocessInputs(KIM::ModelComputeArguments const * modelComputeArguments);
 
-  // void postprocessOutputs(std::vector<torch::Tensor> &,
-  //                         KIM::ModelComputeArguments const *);
-
   void Run(KIM::ModelComputeArguments const * modelComputeArguments);
 
   void contributingAtomCounts(
       KIM::ModelComputeArguments const * modelComputeArguments);
 
-  void graphSetToGraphArray(std::vector<std::set<std::tuple<long, long> > > &);
+  // void graphSetToGraphArray(std::vector<std::set<std::tuple<long, long> > > &);
   // TorchMLModelImplementation * implementation_;
 };
 
@@ -117,7 +108,7 @@ int sym_to_z(std::string &);
 class SymmetricCantorPairing
 {
  public:
-  int64_t operator()(const std::array<long, 2> & t) const
+  int64_t operator()(const std::array<std::int64_t, 2> & t) const
   {
     int64_t k1 = t[0];
     int64_t k2 = t[1];
@@ -128,17 +119,24 @@ class SymmetricCantorPairing
   }
 };
 
+class SymmetricEqual{
+ public:
+  bool operator()(const std::array<std::int64_t, 2> & edge1, const std::array<std::int64_t, 2> & edge2) const {
+    return ((edge1[0] == edge2[0]) && (edge1[1] == edge2[1]))||((edge1[0] == edge2[1]) && (edge1[1] == edge2[0])) ;
+  }
+};
+
 // Forward declaration of MLModel Class
 // This is needed as we don't want to leak any dependency from the ML model
-// to the model driver code. Sometime torch libraries interfere with the
+// to the model driver code. Sometimes torch libraries interfere with the
 // compilation of the model driver.
 // Now ML model is completely isolated
 
 class MLModel
 {
  public:
-  static MLModel * create(const char * /*model_file_path*/,
-                          const char * /*device_name*/,
+  static MLModel * create(const std::string & /*model_file_path*/,
+                          const std::string & /*device_name*/,
                           int /*model_input_size*/);
 
   virtual void SetInputNode(int /*model_input_index*/,
@@ -162,14 +160,11 @@ class MLModel
                             bool clone)
       = 0;
 
-  virtual void
-  Run(double * /*energy*/, double * /*partial energy*/, double * /*forces*/)
-      = 0;
-
-  virtual void SetInputSize(int) = 0;
+  virtual void Run(double *, double *, double *) = 0;
 
   virtual ~MLModel() = default;
-};
 
+  const std::string device_str;
+};
 
 #endif  // TORCH_EXPORT_MODEL_DRIVER_IMPLEMENTATION_HPP

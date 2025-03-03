@@ -9,7 +9,8 @@ add_compile_options(-std=c++17)
 #list(APPEND CMAKE_PREFIX_PATH $ENV{TORCH_ROOT})
 find_package(Torch REQUIRED)
 
-add_library(${ML_RUNTIME_TARGET_LIB} STATIC MLModel.cpp)
+add_library(${ML_RUNTIME_TARGET_LIB} STATIC MLModel.cpp
+        ../yaml.hpp)
 
 set_property(TARGET ${ML_RUNTIME_TARGET_LIB} PROPERTY POSITION_INDEPENDENT_CODE ON)
 set_property(TARGET ${ML_RUNTIME_TARGET_LIB} PROPERTY CXX_STANDARD 17)

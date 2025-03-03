@@ -3,6 +3,7 @@
 #include "TorchExportModelDriver.hpp"
 #include <stdexcept>
 #include <vector>
+#include "yaml.hpp"
 
 #include <cmath>
 #include <cstring>
@@ -12,11 +13,8 @@
 
 #define MAX_FILE_NUM 3
 // typedef double VecOfSize3[3];
-#define KIM_DEVICE_ENV_VAR "KIM_MODEL_EXECUTION_DEVICE"
-// THIS IS A TEMPORARY WORKAROUND ELEMENT MAPPING
-//  TODO: REMOVE THIS WHEN File-io is fixed
 #define KIM_ELEMENTS_ENV_VAR "KIM_MODEL_ELEMENTS_MAP"
-
+#define KIM_SO_ENV_VAR "KIM_MODEL_SO_PATH"
 //******************************************************************************
 #undef KIM_LOGGER_OBJECT_NAME
 #define KIM_LOGGER_OBJECT_NAME modelDriverCreate
@@ -36,7 +34,6 @@ TorchExportModelDriverImplementation::TorchExportModelDriverImplementation(
   influence_distance = 0.0;
   n_elements = 0;
   ml_model = nullptr;
-  returns_forces = false;
   cutoff_distance = 0.0;
   n_layers = 0;
   n_contributing_atoms = 0;
@@ -61,16 +58,9 @@ TorchExportModelDriverImplementation::TorchExportModelDriverImplementation(
 
   // Set Influence distance
   // ---------------------------------------------------------
-  if (preprocessing == "Graph")
-  {
-    modelWillNotRequestNeighborsOfNoncontributingParticles_
-        = static_cast<int>(false);
-  }
-  else
-  {
-    modelWillNotRequestNeighborsOfNoncontributingParticles_
+  modelWillNotRequestNeighborsOfNoncontributingParticles_
         = static_cast<int>(true);
-  }
+
   modelDriverCreate->SetInfluenceDistancePointer(&influence_distance);
   modelDriverCreate->SetNeighborListPointers(
       1,
@@ -111,13 +101,7 @@ TorchExportModelDriverImplementation::TorchExportModelDriverImplementation(
 
   // Set preprocessor descriptor callbacks
   // --------------------------------------------------
-  if (preprocessing == "Graph")
-  {
-    graph_edge_indices = new long *[n_layers];
-    for (int i = 0; i < n_layers; i++) graph_edge_indices[i] = nullptr;
-  }
-  else { graph_edge_indices = nullptr; }
-  descriptor_array = nullptr;
+  graph_edge_indices = nullptr;
   species_atomic_number = nullptr;
   contraction_array = nullptr;
 }
@@ -228,7 +212,6 @@ void TorchExportModelDriverImplementation::Run(
   if (ier) return;
 
   ml_model->Run(energy, partialEnergy, forces);
-  // postprocessOutputs(out_tensor, modelComputeArguments);
 }
 
 // -----------------------------------------------------------------------------
@@ -406,46 +389,40 @@ void TorchExportModelDriverImplementation::setGraphInputs(
   int numberOfNeighbors;
   int const * neighbors;
 
-  std::unordered_set<int> atoms_in_layers;
-  std::vector<std::unordered_set<std::array<long, 2>, SymmetricCantorPairing> >
-      unrolled_graph(n_layers);
+  std::vector<int> atoms_in_layers;
+  atoms_in_layers.reserve(*numberOfParticlesPointer);
+  std::unordered_set<std::array<long, 2>,SymmetricCantorPairing, SymmetricEqual> graph;
 
   for (int i = 0; i < *numberOfParticlesPointer; i++)
   {
-    if (particleContributing[i] == 1) { atoms_in_layers.insert(i); }
+    if (particleContributing[i] == 1) { atoms_in_layers.push_back(i); }
   }
 
   double cutoff_sq = cutoff_distance * cutoff_distance;
   double _x, _y, _z;
   std::array<double, 3> i_arr = {0.0, 0.0, 0.0}, j_arr = {0.0, 0.0, 0.0};
-  int ii = 0;
-  do {
-    std::unordered_set<int> atoms_in_next_layer;
-    for (int atom_i : atoms_in_layers)
+  std::unordered_set<int> atoms_in_next_layer;
+
+  // TODO: This is now trivially parallalizable
+  for (auto atom_i : atoms_in_layers)
+  {
+    modelComputeArguments->GetNeighborList(
+        0, atom_i, &numberOfNeighbors, &neighbors);
+    for (int j = 0; j < numberOfNeighbors; j++)
     {
-      modelComputeArguments->GetNeighborList(
-          0, atom_i, &numberOfNeighbors, &neighbors);
-      for (int j = 0; j < numberOfNeighbors; j++)
+      int atom_j = neighbors[j];
+      std::memcpy(i_arr.data(), coordinates + 3 * atom_i, 3 * sizeof(double));
+      std::memcpy(j_arr.data(), coordinates + 3 * atom_j, 3 * sizeof(double));
+      _x = j_arr[0] - i_arr[0];
+      _y = j_arr[1] - i_arr[1];
+      _z = j_arr[2] - i_arr[2];
+      double r_sq = _x * _x + _y * _y + _z * _z;
+      if (r_sq <= cutoff_sq)
       {
-        int atom_j = neighbors[j];
-        std::memcpy(i_arr.data(), coordinates + 3 * atom_i, 3 * sizeof(double));
-        std::memcpy(j_arr.data(), coordinates + 3 * atom_j, 3 * sizeof(double));
-        _x = j_arr[0] - i_arr[0];
-        _y = j_arr[1] - i_arr[1];
-        _z = j_arr[2] - i_arr[2];
-        double r_sq = _x * _x + _y * _y + _z * _z;
-        if (r_sq <= cutoff_sq)
-        {
-          unrolled_graph[ii].insert({atom_i, atom_j});
-          unrolled_graph[ii].insert(
-              {atom_j, atom_i});  // TODO: FIX the symmetric pair thing
-          atoms_in_next_layer.insert(atom_j);
-        }
+        graph.insert({atom_i, atom_j});
       }
     }
-    atoms_in_layers = atoms_in_next_layer;
-    ii++;
-  } while (ii < n_layers);
+  }
 
   if (species_atomic_number)
   {
@@ -458,6 +435,9 @@ void TorchExportModelDriverImplementation::setGraphInputs(
   //  true if it is set, else false
   bool map_species_z = std::getenv(KIM_ELEMENTS_ENV_VAR) != nullptr;
 
+  // TODO: benchmark smart pointers. Using new for performance and persistence
+  // Memory ownership in torch blobs is tricky for CPU. Will be deep copied
+  // anyway in GPU.
   species_atomic_number = new int64_t[*numberOfParticlesPointer];
   for (int i = 0; i < *numberOfParticlesPointer; i++)
   {
@@ -469,8 +449,8 @@ void TorchExportModelDriverImplementation::setGraphInputs(
   }
 
   // edge_distance_vec and edge_distances
-  auto size_edges = unrolled_graph[0].size();
-  auto edge_index = std::vector<std::int64_t>(size_edges * 2);
+  auto size_edges = graph.size();
+  auto edge_index = std::vector<std::int64_t>(size_edges * 4);
   auto edge_distances = std::vector<double>(size_edges);
   auto edge_distances_vec = std::vector<double>(size_edges * 3);
 
@@ -478,7 +458,7 @@ void TorchExportModelDriverImplementation::setGraphInputs(
   auto _edge_distance_vec_ptr
       = reinterpret_cast<double(*)[3]>(edge_distances_vec.data());
   std::size_t index = 0;
-  for(auto& edge_ : unrolled_graph[0])
+  for(auto& edge_ : graph)
   {
     auto from_atom = edge_[0];
     auto to_atom = edge_[1];
@@ -496,7 +476,9 @@ void TorchExportModelDriverImplementation::setGraphInputs(
         + _edge_distance_vec_ptr[index][2] * _edge_distance_vec_ptr[index][2]);
 
     edge_index[index] = from_atom;
-    edge_index[index + unrolled_graph[0].size()] = to_atom;
+    edge_index[index + graph.size()] = to_atom;
+    edge_index[index + 2 * graph.size()] = to_atom;
+    edge_index[index + 3 * graph.size()] = from_atom;
     index++;
   }
 
@@ -529,17 +511,17 @@ void TorchExportModelDriverImplementation::setGraphInputs(
 
   // 5. edge index tensor
   shape.clear();
-  shape = {2, static_cast<std::int64_t>(unrolled_graph[0].size())};
+  shape = {2, static_cast<std::int64_t>(graph.size())};
  ; ml_model->SetInputNode(4, edge_index.data(), shape, false, true);
 ;
   // 6. edge distance tensor
   shape.clear();
-  shape = {static_cast<std::int64_t>(unrolled_graph[0].size())};
+  shape = {static_cast<std::int64_t>(graph.size())};
   ml_model->SetInputNode(5, edge_distances.data(), shape, false, true);
 
   // 7. edge distance vector
   shape.clear();
-  shape = {static_cast<std::int64_t>(unrolled_graph[0].size()), 3};
+  shape = {static_cast<std::int64_t>(graph.size()), 3};
   ml_model->SetInputNode(6, edge_distances_vec.data(), shape, false, true);
 }
 
@@ -555,34 +537,20 @@ void TorchExportModelDriverImplementation::readParametersFile(
   int num_param_files;
   std::string const *param_file_name, *tmp_file_name;
   std::string const * param_dir_name;
-  std::string const * model_file_name;
-  std::string const * descriptor_file_name;
 
   modelDriverCreate->GetNumberOfParameterFiles(&num_param_files);
-
-  // Only 2 files expected .param and .pt
-  if (num_param_files > MAX_FILE_NUM)
-  {
-    *ier = true;
-    LOG_ERROR("Too many parameter files");
-    return;
-  }
 
   for (int i = 0; i < num_param_files; i++)
   {
     modelDriverCreate->GetParameterFileBasename(i, &tmp_file_name);
-    if (tmp_file_name->substr(tmp_file_name->size() - 5) == "param")
+    if (tmp_file_name->substr(tmp_file_name->size() - 4) == "yaml" || tmp_file_name->substr(tmp_file_name->size() - 3) == "yml")
     {
       param_file_name = tmp_file_name;
     }
-    else if (tmp_file_name->substr(tmp_file_name->size() - 2) == "pt")
-    {
-      model_file_name = tmp_file_name;
-    }
-    else if (tmp_file_name->substr(tmp_file_name->size() - 3) == "dat")
-    {
-      descriptor_file_name = tmp_file_name;
-    }
+    // else if (tmp_file_name->substr(tmp_file_name->size() - 2) == "so") // currently loading .so from env variable
+    // {
+    //   model_file_name = tmp_file_name;
+    // }
     else
     {
       LOG_ERROR("File extensions do not match; only expected .param or .pt");
@@ -596,128 +564,43 @@ void TorchExportModelDriverImplementation::readParametersFile(
 
   std::string full_qualified_file_name
       = *param_dir_name + "/" + *param_file_name;
-  std::string full_qualified_model_name
-      = *param_dir_name + "/" + *model_file_name;
+  // std::string full_qualified_model_name
+  //     = *param_dir_name + "/" + *model_file_name;
 
   std::string placeholder_string;
 
-  std::fstream file_ptr(full_qualified_file_name);
-
-  if (file_ptr.is_open())
-  {
-    // TODO better structured input block. YAML?
-    // Ignore comments
-    do {
-      std::getline(file_ptr, placeholder_string);
-    } while (placeholder_string[0] == '#');
-
-    n_elements = std::stoi(placeholder_string);
-    std::getline(file_ptr, placeholder_string);
-
-    for (int i = 0; i < n_elements; i++)
-    {
-      auto pos = placeholder_string.find(' ');
-      elements_list.push_back(placeholder_string.substr(0, pos));
-      if (pos == std::string::npos)
-      {
-        if (i + 1 != n_elements)
-        {
-          LOG_ERROR("Incorrect formatting OR number of elements");
-          *ier = true;
-          return;
-        }
-        LOG_DEBUG("Number of elements read: " + std::to_string(i + 1));
-      }
-      else { placeholder_string.erase(0, pos + 1); }
-    }
-    // Species Z map
-    for (int i = 0; i < n_elements; i++)
-    {
-      z_map.push_back(sym_to_z(elements_list[i]));
-    }
-
-    // blank line
-    std::getline(file_ptr, placeholder_string);
-    // Ignore comments
-    do {
-      std::getline(file_ptr, placeholder_string);
-    } while (placeholder_string[0] == '#');
-    // which preprocessing to use
-    preprocessing = placeholder_string;
-    // std::transform(preprocessing.begin(),preprocessing.end(),
-    //                preprocessing.begin(),::tolower);
-
-    // blank line
-    std::getline(file_ptr, placeholder_string);
-    // Ignore comments
-    do {
-      std::getline(file_ptr, placeholder_string);
-    } while (placeholder_string[0] == '#');
-    // influence distance
-    cutoff_distance = std::stod(placeholder_string);
-    n_layers = 0;
-    if (preprocessing == "Graph")
-    {
-      std::getline(file_ptr, placeholder_string);
-      n_layers = std::stoi(placeholder_string);
-      influence_distance = cutoff_distance * n_layers;
-    }
-    else { influence_distance = cutoff_distance; }
-
-    // blank line
-    std::getline(file_ptr, placeholder_string);
-    // Ignore comments
-    do {
-      std::getline(file_ptr, placeholder_string);
-    } while (placeholder_string[0] == '#');
-    // Model name for comparison
-    model_name = placeholder_string;
-
-
-    // blank line
-    std::getline(file_ptr, placeholder_string);
-    // Ignore comments
-    do {
-      std::getline(file_ptr, placeholder_string);
-    } while (placeholder_string[0] == '#');
-    // Does the model return forces? If no then we need to compute gradients
-    // If yes we can optimize it further using inference mode
-    for (char & t : placeholder_string) t = static_cast<char>(tolower(t));
-    returns_forces
-        = placeholder_string == "true" || placeholder_string == "True";
-
-    if (!returns_forces){
-      throw std::runtime_error("TorchExport Model driver needs the models to return forces");
-    }
-
-    // blank line
-    std::getline(file_ptr, placeholder_string);
-    // Ignore comments
-    do {
-      std::getline(file_ptr, placeholder_string);
-    } while (placeholder_string[0] == '#');
-    // number of strings
-    number_of_inputs = std::stoi(placeholder_string);
-  }
-  else
-  {
-    LOG_ERROR("Param file not found");
+  auto yaml_parser = YAMLReader();
+  auto yaml_status = yaml_parser.load(full_qualified_file_name);
+  if (yaml_status){
+    LOG_DEBUG("Loaded YAML file");
+  } else {
+    LOG_ERROR("Could not load the YAML parameter file");
     *ier = true;
     return;
   }
-  file_ptr.close();
+  //
+  // LOG_DEBUG("Successfully parsed parameter file");
+  // if (*model_file_name != model_name)
+  // {
+  //   LOG_ERROR("Provided model file name different from present model file.");
+  //   *ier = true;
+  //   return;
+  // }
 
-  LOG_DEBUG("Successfully parsed parameter file");
-  if (*model_file_name != model_name)
-  {
-    LOG_ERROR("Provided model file name different from present model file.");
-    *ier = true;
-    return;
-  }
+  cutoff_distance = std::stod(yaml_parser.get("cutoff"));
+  n_layers = std::stoi(yaml_parser.get("n_layers"));
+  influence_distance = cutoff_distance * n_layers;
+  auto device = yaml_parser.get("device");
+  number_of_inputs = std::stoi(yaml_parser.get("number_of_inputs"));
+
+  // TEMP SOLUTION
+  model_name = std::getenv(KIM_SO_ENV_VAR) ? std::getenv(KIM_SO_ENV_VAR) : "model.so"; // if no env var, load model.so from current dir
+
+
   // Load Torch Model
   // ----------------------------------------------------------------
-  ml_model = MLModel::create("dummpy.pt",
-                             std::getenv(KIM_DEVICE_ENV_VAR),
+  ml_model = MLModel::create(model_name,
+                             device,
                              number_of_inputs);
   LOG_INFORMATION("Loaded Torch model and set to eval");
 }
@@ -735,12 +618,7 @@ void TorchExportModelDriverImplementation::unitConversion(
     KIM::TimeUnit const requestedTimeUnit,
     int * const ier)
 {
-  // KIM::LengthUnit fromLength = KIM::LENGTH_UNIT::A;
-  // KIM::EnergyUnit fromEnergy = KIM::ENERGY_UNIT::eV;
-  // KIM::ChargeUnit fromCharge = KIM::CHARGE_UNIT::e;
-  // KIM::TemperatureUnit fromTemperature = KIM::TEMPERATURE_UNIT::K;
-  // KIM::TimeUnit fromTime = KIM::TIME_UNIT::ps;
-  // double convertLength = 1.0;
+  // DEFAULT units: A, eV, change if needed
   if (requestedLengthUnit != KIM::LENGTH_UNIT::A)
   {
     LOG_ERROR("Only Angstroms supported for length unit");
@@ -753,27 +631,6 @@ void TorchExportModelDriverImplementation::unitConversion(
     *ier = true;
     return;
   }
-  //   *ier = KIM::ModelDriverCreate::ConvertUnit(fromLength,
-  //                                              fromEnergy,
-  //                                              fromCharge,
-  //                                              fromTemperature,
-  //                                              fromTime,
-  //                                              requestedLengthUnit,
-  //                                              requestedEnergyUnit,
-  //                                              requestedChargeUnit,
-  //                                              requestedTemperatureUnit,
-  //                                              requestedTimeUnit,
-  //                                              1.0,
-  //                                              0.0,
-  //                                              0.0,
-  //                                              0.0,
-  //                                              0.0,
-  //                                              &convertLength);
-  //
-  //   if (*ier) {
-  //       LOG_ERROR("Unable to convert length unit");
-  //       return;
-  //   }
 
   *ier = modelDriverCreate->SetUnits(KIM::LENGTH_UNIT::A,
                                      KIM::ENERGY_UNIT::eV,
@@ -862,31 +719,6 @@ int TorchExportModelDriverImplementation::ComputeArgumentsDestroy(
   return false;
 }
 
-// ---------------------------------------------------------------------------------
-void TorchExportModelDriverImplementation::graphSetToGraphArray(
-    std::vector<std::set<std::tuple<long, long> > > & unrolled_graph)
-{
-  int i = 0;
-  for (auto const & edge_index_set : unrolled_graph)
-  {
-    int j = 0;
-    int graph_size = static_cast<int>(edge_index_set.size());
-    // Sanitize previous graph
-    if (graph_edge_indices[i])
-    {
-      delete[] graph_edge_indices[i];
-      graph_edge_indices[i] = nullptr;
-    }
-    graph_edge_indices[i] = new long[graph_size * 2];
-    for (auto bond_pair : edge_index_set)
-    {
-      graph_edge_indices[i][j] = std::get<0>(bond_pair);
-      graph_edge_indices[i][j + graph_size] = std::get<1>(bond_pair);
-      j++;
-    }
-    i++;
-  }
-}
 
 //-------------------------------------------------------------------------------------
 #undef KIM_LOGGER_OBJECT_NAME
@@ -919,18 +751,7 @@ void TorchExportModelDriverImplementation::contributingAtomCounts(
 // *****************************************************************************
 TorchExportModelDriverImplementation::~TorchExportModelDriverImplementation()
 {
-  delete[] descriptor_array;
-  if (preprocessing == "Graph")
-  {
-    for (int i = 0; i < n_layers; i++) delete[] graph_edge_indices[i];
-  }
   delete[] graph_edge_indices;
-  // This will be a rather ugly temporary workaround. Will fix it once Enzyme
-  // provides solution https://github.com/EnzymeAD/Enzyme/issues/929
-  // TODO: URGENT Properly clean the descriptor kind
-  // Leaving it like this for now as it looks like the enzyme lib continue to
-  // function despite the issue. Will revisit in future
-
   delete[] species_atomic_number;
   delete[] contraction_array;
 }

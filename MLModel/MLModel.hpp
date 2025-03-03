@@ -60,6 +60,8 @@ class MLModel
   virtual void Run(double *, double *, double *) = 0;
 
   virtual ~MLModel() = default;
+
+  const std::string device_str;
 };
 
 /* Abstracted AOTInductor container for future proofing. It is rapidly changing
@@ -175,6 +177,7 @@ class PytorchModel : public MLModel
 
  public:
   const std::string model_file_path_;
+  const std::string device_str;
 
   PytorchModel(const std::string & /*model_file_path*/,
                const std::string & /*device_name*/,
