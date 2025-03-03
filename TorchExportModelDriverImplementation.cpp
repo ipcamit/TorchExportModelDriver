@@ -585,6 +585,26 @@ void TorchExportModelDriverImplementation::readParametersFile(
   //   return;
   // }
 
+  // n_elements = std::stoi(yaml_parser.get("n_elements"));
+  // auto elements = yaml_parser.get("elements");
+  // std::cout << elements <<"\n";
+  //
+  // std::stringstream element_stream(elements);
+  //
+  // auto element = std::string{""};
+  // for (int i = 0; i < n_elements; i++){
+  //   element.clear();
+  //   if (! (element_stream >> element)){
+  //     throw std::runtime_error("list of elements does not match n_elements");
+  //   } else {
+  //     elements_list.push_back(element);
+  //   }
+  // }
+  //
+  // for (auto const & elem: elements_list)
+  //   std::cout << elem << " ";
+  // std::cout << std::endl;
+
   cutoff_distance = std::stod(yaml_parser.get("cutoff"));
   n_layers = std::stoi(yaml_parser.get("n_layers"));
   influence_distance = cutoff_distance * n_layers;

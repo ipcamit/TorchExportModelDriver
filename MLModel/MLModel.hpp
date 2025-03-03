@@ -8,9 +8,9 @@
 #include <vector>
 
 #include <torch/csrc/inductor/aoti_runner/model_container_runner_cpu.h>
-#ifndef CPU_ONLY  // exclude cuda runner if CPU only requested
-#include <torch/csrc/inductor/aoti_runner/model_container_runner_cuda.h>
-#endif
+// #ifndef CPU_ONLY  // exclude cuda runner if CPU only requested
+// #include <torch/csrc/inductor/aoti_runner/model_container_runner_cuda.h>
+// #endif
 #include <torch/script.h>
 
 
@@ -96,21 +96,21 @@ class AOTInductorModelContainerCPU : public AOTInductorModelContainer
 
 class AOTInductorModelContainerGPU : public AOTInductorModelContainer
 {
-#ifndef CPU_ONLY
- private:
-  torch::inductor::AOTIModelContainerRunnerCuda torch_module;
-
- public:
-  AOTInductorModelContainerGPU(const std::string & model_path) :
-      torch_module(model_path)
-  {
-  }
-
-  std::vector<torch::Tensor> Run(std::vector<torch::Tensor> & inputs) override
-  {
-    return torch_module.run(inputs);
-  }
-#else
+// #ifndef CPU_ONLY
+//  private:
+//   torch::inductor::AOTIModelContainerRunnerCuda torch_module;
+//
+//  public:
+//   AOTInductorModelContainerGPU(const std::string & model_path) :
+//       torch_module(model_path)
+//   {
+//   }
+//
+//   std::vector<torch::Tensor> Run(std::vector<torch::Tensor> & inputs) override
+//   {
+//     return torch_module.run(inputs);
+//   }
+// #else
  public:
   AOTInductorModelContainerGPU(const std::string & model_path)
   {
@@ -124,7 +124,7 @@ class AOTInductorModelContainerGPU : public AOTInductorModelContainer
     throw std::runtime_error(
         "Run() called on GPU model, but compiled with CPU-only support.");
   }
-#endif
+// #endif
 };
 
 
