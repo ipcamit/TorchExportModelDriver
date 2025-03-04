@@ -30,7 +30,7 @@ TorchExportModelDriverImplementation::TorchExportModelDriverImplementation(
 {
   *ier = false;
   // initialize members to remove warning----
-  std::cout << "EXPERIMENTAL\n";
+  std::cout << "<<EXPERIMENTAL TORCHEXPORT DRIVER>>\n";
   influence_distance = 0.0;
   n_elements = 0;
   ml_model = nullptr;
@@ -141,10 +141,11 @@ int TorchExportModelDriverImplementation::Compute(
 {
   Run(modelComputeArguments);
   // TODO see proper way to return error codes
+
   return false;
 }
 
-//******************************************************************************
+//*****************************************************************************
 #undef KIM_LOGGER_OBJECT_NAME
 #define KIM_LOGGER_OBJECT_NAME modelComputeArgumentsCreate
 
@@ -218,8 +219,8 @@ void TorchExportModelDriverImplementation::preprocessInputs(
     KIM::ModelComputeArguments const * const modelComputeArguments)
 {
   // TODO: Make preprocessing type enums
-  if (preprocessing == "None") { setDefaultInputs(modelComputeArguments); }
-  else if (preprocessing == "Graph") { setGraphInputs(modelComputeArguments); }
+  if (preprocessing == "none") { setDefaultInputs(modelComputeArguments); }
+  else if (preprocessing == "graph") { setGraphInputs(modelComputeArguments); }
 }
 
 
@@ -585,31 +586,35 @@ void TorchExportModelDriverImplementation::readParametersFile(
   //   return;
   // }
 
-  // n_elements = std::stoi(yaml_parser.get("n_elements"));
-  // auto elements = yaml_parser.get("elements");
-  // std::cout << elements <<"\n";
-  //
-  // std::stringstream element_stream(elements);
-  //
-  // auto element = std::string{""};
-  // for (int i = 0; i < n_elements; i++){
-  //   element.clear();
-  //   if (! (element_stream >> element)){
-  //     throw std::runtime_error("list of elements does not match n_elements");
-  //   } else {
-  //     elements_list.push_back(element);
-  //   }
-  // }
-  //
-  // for (auto const & elem: elements_list)
-  //   std::cout << elem << " ";
-  // std::cout << std::endl;
+  n_elements = std::stoi(yaml_parser.get("n_elements"));
+  auto elements = yaml_parser.get("elements");
+
+  std::stringstream element_stream(elements);
+
+  auto element = std::string {""};
+  for (int i = 0; i < n_elements; i++)
+  {
+    element.clear();
+    if (!(element_stream >> element))
+    {
+      throw std::runtime_error("list of elements does not match n_elements");
+    }
+    else { elements_list.push_back(element); }
+  }
 
   cutoff_distance = std::stod(yaml_parser.get("cutoff"));
   n_layers = std::stoi(yaml_parser.get("n_layers"));
   influence_distance = cutoff_distance * n_layers;
   auto device = yaml_parser.get("device");
   number_of_inputs = std::stoi(yaml_parser.get("number_of_inputs"));
+
+  preprocessing = yaml_parser.get("preprocessing") == ""
+                      ? "graph"
+                      : yaml_parser.get("preprocessing");
+  std::transform(preprocessing.begin(),
+                 preprocessing.end(),
+                 preprocessing.begin(),
+                 ::tolower);  // ensuring consistent case
 
   // TEMP SOLUTION
   model_name
@@ -620,7 +625,8 @@ void TorchExportModelDriverImplementation::readParametersFile(
 
   // Load Torch Model
   // ----------------------------------------------------------------
-  ml_model = MLModel::create(model_name.c_str(), device.c_str(), number_of_inputs);
+  ml_model
+      = MLModel::create(model_name.c_str(), device.c_str(), number_of_inputs);
   LOG_INFORMATION("Loaded Torch model and set to eval");
 }
 

@@ -169,8 +169,6 @@ void PytorchModel::Run(double * energy,
   auto energy_tensor = out_tensor[0].to(torch::kCPU);
   auto torch_forces = out_tensor[1].to(torch::kCPU);
 
-  std::cout << energy_tensor;
-
   energy_tensor = energy_tensor.to(torch::kFloat64);
   torch_forces = torch_forces.to(torch::kFloat64);
 
