@@ -22,10 +22,10 @@ target_include_directories(MLModel PRIVATE ${TORCH_INCLUDE_DIRS})
 #target_link_libraries("${PROJECT_NAME}" PRIVATE MLModel PRIVATE ${TORCH_LIBRARIES})
 #target_link_libraries("${PROJECT_NAME}" PUBLIC "/home/amit/Projects/COLABFIT/TorchExport/escn.so")
 # set_property(TARGET ${PROJECT_NAME} PROPERTY CXX_STANDARD 17)
-#find_package(CUDA)
-#
-#if (NOT FOUND_CUDA)
-#    message("CUDA NOT FOUND, USING CPU ONLY VERSION.")
-#    set(CMAKE_CXX_FLAGS  "${CMAKE_CXX_FLAGS} -DCPU_ONLY")
-#endif()
-#
+find_package(CUDA)
+
+if (NOT FOUND_CUDA)
+    message("CUDA NOT FOUND, USING CPU ONLY VERSION.")
+    set(CMAKE_CXX_FLAGS  "${CMAKE_CXX_FLAGS} -DCPU_ONLY")
+endif()
+

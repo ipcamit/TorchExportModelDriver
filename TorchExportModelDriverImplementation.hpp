@@ -131,12 +131,16 @@ class SymmetricEqual{
 // to the model driver code. Sometimes torch libraries interfere with the
 // compilation of the model driver.
 // Now ML model is completely isolated
+// ``create`` needs to use const char *, and not string because of the
+// -D_GLIBCXX_USE_CXX11_ABI=0 option in Torch. Mangles the std::string, but not
+// in MLModel.
+// TODO: find a workaround.
 
 class MLModel
 {
  public:
-  static MLModel * create(const std::string & /*model_file_path*/,
-                          const std::string & /*device_name*/,
+  static MLModel * create(const char * /*model_file_path*/,
+                          const char * /*device_name*/,
                           int /*model_input_size*/);
 
   virtual void SetInputNode(int /*model_input_index*/,

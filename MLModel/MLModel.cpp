@@ -9,8 +9,8 @@
 // #include <unistd.h>
 // #endif
 
-MLModel * MLModel::create(const std::string & model_file_path,
-                          const std::string & device_name,
+MLModel * MLModel::create(const char * model_file_path,
+                          const char * device_name,
                           const int model_input_size)
 {
   return new PytorchModel(model_file_path, device_name, model_input_size);

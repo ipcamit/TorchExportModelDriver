@@ -620,7 +620,7 @@ void TorchExportModelDriverImplementation::readParametersFile(
 
   // Load Torch Model
   // ----------------------------------------------------------------
-  ml_model = MLModel::create(model_name, device, number_of_inputs);
+  ml_model = MLModel::create(model_name.c_str(), device.c_str(), number_of_inputs);
   LOG_INFORMATION("Loaded Torch model and set to eval");
 }
 
