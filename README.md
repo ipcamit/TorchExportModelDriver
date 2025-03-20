@@ -41,7 +41,7 @@ Currently you need to provide the `CMAKE_PREFIX_PATH` explicitly. Will be fixed 
 
 ```shell
 git clone https://github.com/ipcamit/TorchExportModelDriver
-CMAKE_PREFIX_PATH=${CONDA_PREFIX}/lib/python3.10/site-packages/torch/share/cmake kim-api-collections-management install user TorchExportDriver
+CMAKE_PREFIX_PATH=${CONDA_PREFIX}/lib/python3.10/site-packages/torch/share/cmake kim-api-collections-management install user TorchExportModelDriver
 ```
 
 You should see output as:
