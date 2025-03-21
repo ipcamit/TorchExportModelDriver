@@ -10,6 +10,7 @@
 #include <set>
 #include <vector>
 #include <memory>
+#include <cstdint>
 // #include "MLModel.hpp"
 // #include <torch/torch.h>
 
@@ -52,8 +53,8 @@ class TorchExportModelDriverImplementation
   int modelWillNotRequestNeighborsOfNoncontributingParticles_;
   int n_contributing_atoms;
   int number_of_inputs;
-  std::int64_t * species_atomic_number;
-  std::int64_t * contraction_array;
+  int64_t * species_atomic_number;
+  int64_t * contraction_array;
 
   MLModel * ml_model;
 
@@ -61,7 +62,7 @@ class TorchExportModelDriverImplementation
   std::vector<int> neighbor_list;
   std::vector<int> z_map;
 
-  std::int64_t * graph_edge_indices;
+  int64_t * graph_edge_indices;
 
   void
   updateNeighborList(KIM::ModelComputeArguments const * modelComputeArguments,
@@ -108,7 +109,7 @@ int sym_to_z(std::string &);
 class SymmetricCantorPairing
 {
  public:
-  int64_t operator()(const std::array<std::int64_t, 2> & t) const
+  int64_t operator()(const std::array<int64_t, 2> & t) const
   {
     int64_t k1 = t[0];
     int64_t k2 = t[1];
@@ -121,7 +122,7 @@ class SymmetricCantorPairing
 
 class SymmetricEqual{
  public:
-  bool operator()(const std::array<std::int64_t, 2> & edge1, const std::array<std::int64_t, 2> & edge2) const {
+  bool operator()(const std::array<int64_t, 2> & edge1, const std::array<int64_t, 2> & edge2) const {
     return ((edge1[0] == edge2[0]) && (edge1[1] == edge2[1]))||((edge1[0] == edge2[1]) && (edge1[1] == edge2[0])) ;
   }
 };
@@ -145,21 +146,21 @@ class MLModel
 
   virtual void SetInputNode(int /*model_input_index*/,
                             double * /*input*/,
-                            std::vector<std::int64_t> & /*arb size*/,
+                            std::vector<int64_t> & /*arb size*/,
                             bool requires_grad,
                             bool clone)
       = 0;
 
   virtual void SetInputNode(int /*model_input_index*/,
                             int * /*input*/,
-                            std::vector<std::int64_t> & /*arb size*/,
+                            std::vector<int64_t> & /*arb size*/,
                             bool requires_grad,
                             bool clone)
       = 0;
 
   virtual void SetInputNode(int /*model_input_index*/,
-                            std::int64_t * /*input*/,
-                            std::vector<std::int64_t> & /*arb size*/,
+                            int64_t * /*input*/,
+                            std::vector<int64_t> & /*arb size*/,
                             bool requires_grad,
                             bool clone)
       = 0;

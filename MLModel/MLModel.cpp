@@ -124,7 +124,7 @@ torch::Dtype PytorchModel::get_torch_default_floating_type()
 
 void PytorchModel::SetInputNode(int idx,
                                 double * data,
-                                std::vector<std::int64_t> & shape,
+                                std::vector<int64_t> & shape,
                                 bool requires_grad = false,
                                 bool clone = true)
 {
@@ -133,7 +133,7 @@ void PytorchModel::SetInputNode(int idx,
 
 void PytorchModel::SetInputNode(int idx,
                                 int * data,
-                                std::vector<std::int64_t> & shape,
+                                std::vector<int64_t> & shape,
                                 bool requires_grad = false,
                                 bool clone = true)
 {
@@ -141,8 +141,8 @@ void PytorchModel::SetInputNode(int idx,
 }
 
 void PytorchModel::SetInputNode(int idx,
-                                std::int64_t * data,
-                                std::vector<std::int64_t> & shape,
+                                int64_t * data,
+                                std::vector<int64_t> & shape,
                                 bool requires_grad = false,
                                 bool clone = true)
 {

@@ -5,28 +5,41 @@ This model drived provides interface between torch inductor exported models (las
 using `torch._export.aot_inductor`) and KIM-API interface. Below is the step-by-step guide
 to use your own models with it.
 
+Given below is a minimal example to recreate the driver and run simple calculation with it.
+
+> Please note that the provided model is very poor and only for illustration purposes. DO not use it for research.
+
+For ease of demo, we will use a minimal conda docker image as it simplifies the dependencies, and interactions.
+We will use the `continuumio/miniconda` image for the same,
+
+```shell
+docker run --network host -it continuumio/miniconda3 bash
+```
+
+Inside the terminal, please clone the git repo
+
+```shell
+git clone https://github.com/ipcamit/TorchExportModelDriver
+```
+
 ## 1. Install correct Torch env(conda)
 You need torch 2.4.0, and other dependencies. Easiest is to use the provided environment
 file.
 
+
 ```shell
-conda env create -f environment.yml
+conda env create -f TorchExportModelDriver/environment.yml
 ```
 
 ## 2. Correct KIM env
 
-Install the KIM-API
+Install the KIM-API and `kimpy`. `kimpy` is a hard dependency for ASE calculator.
 
 ```
-conda install kim-api==2.3.0 -c conda-forge
+conda install kim-api==2.3.0 kimpy -c conda-forge
 
 ```
 
-Install other python dependencies, `kimpy` is a hard dependency for ASE calculator.
-
-```shell
-pip install kim-edn==1.4.1 kim-property==2.6.4 kim-query==4.0.0 kimpy==2.1.1 
-```
 
 ## 3. Env variables
 For torch export to run models correctly you need properly source the env variables, namely
@@ -40,7 +53,6 @@ export INCLUDE=$INCLUDE:${CONDA_PREFIX}/lib/python3.10/site-packages/torch/inclu
 Currently you need to provide the `CMAKE_PREFIX_PATH` explicitly. Will be fixed in future versions.
 
 ```shell
-git clone https://github.com/ipcamit/TorchExportModelDriver
 CMAKE_PREFIX_PATH=${CONDA_PREFIX}/lib/python3.10/site-packages/torch/share/cmake kim-api-collections-management install user TorchExportModelDriver
 ```
 
@@ -126,6 +138,14 @@ export KIM_MODEL_SO_PATH=/path/to/my_model.so
 That should be it. You can now run your model.
 
 # ASE Example:
+
+To run provided ASE example do:
+
+```shell
+cd test
+export KIM_MODEL_SO_PATH=`pwd`/escn.so
+python test.py
+```
 
 ```python
 import numpy as np

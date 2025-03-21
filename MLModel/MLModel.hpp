@@ -2,6 +2,7 @@
 #define MLMODEL_HPP
 
 #include <cstdlib>
+#include <cstdint>
 #include <memory>  // std::unique_ptr
 #include <string>
 #include <type_traits>  // std::is_same
@@ -19,7 +20,7 @@ template<typename T>
 torch::Dtype getTorchDtype()
 {
   if (std::is_same<T, int>::value) return torch::kInt32;
-  if (std::is_same<T, std::int64_t>::value) return torch::kInt64;
+  if (std::is_same<T, int64_t>::value) return torch::kInt64;
   if (std::is_same<T, float>::value) return torch::kFloat32;
   if (std::is_same<T, double>::value) return torch::kFloat64;
   throw std::runtime_error("Invalid datatype provided as input to the model");
@@ -38,21 +39,21 @@ class MLModel
 
   virtual void SetInputNode(int /*model_input_index*/,
                             double * /*input*/,
-                            std::vector<std::int64_t> & /*arb size*/,
+                            std::vector<int64_t> & /*arb size*/,
                             bool requires_grad,
                             bool clone)
       = 0;
 
   virtual void SetInputNode(int /*model_input_index*/,
                             int * /*input*/,
-                            std::vector<std::int64_t> & /*arb size*/,
+                            std::vector<int64_t> & /*arb size*/,
                             bool requires_grad,
                             bool clone)
       = 0;
 
   virtual void SetInputNode(int /*model_input_index*/,
-                            std::int64_t * /*input*/,
-                            std::vector<std::int64_t> & /*arb size*/,
+                            int64_t * /*input*/,
+                            std::vector<int64_t> & /*arb size*/,
                             bool requires_grad,
                             bool clone)
       = 0;
@@ -146,7 +147,7 @@ class PytorchModel : public MLModel
   template<typename T>
   void SetInputNodeTemplate(int idx,
                             T * data,
-                            std::vector<std::int64_t> & shape,
+                            std::vector<int64_t> & shape,
                             bool requires_grad,
                             bool clone)
   {
@@ -185,19 +186,19 @@ class PytorchModel : public MLModel
 
   void SetInputNode(int /*model_input_index*/,
                     double * /*input*/,
-                    std::vector<std::int64_t> & /*arb size*/,
+                    std::vector<int64_t> & /*arb size*/,
                     bool requires_grad,
                     bool clone) override;
 
   void SetInputNode(int /*model_input_index*/,
                     int * /*input*/,
-                    std::vector<std::int64_t> & /*arb size*/,
+                    std::vector<int64_t> & /*arb size*/,
                     bool requires_grad,
                     bool clone) override;
 
   void SetInputNode(int /*model_input_index*/,
-                    std::int64_t * /*input*/,
-                    std::vector<std::int64_t> & /*arb size*/,
+                    int64_t * /*input*/,
+                    std::vector<int64_t> & /*arb size*/,
                     bool requires_grad,
                     bool clone) override;
 

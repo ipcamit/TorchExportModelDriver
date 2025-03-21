@@ -5,6 +5,7 @@
 #include <stdexcept>
 #include <vector>
 
+#include <cstdint>
 #include <cmath>
 #include <cstring>
 #include <fstream>
@@ -315,7 +316,7 @@ void TorchExportModelDriverImplementation::setDefaultInputs(
 
   int n_particles = *numberOfParticlesPointer;
 
-  std::vector<std::int64_t> shape = {static_cast<std::int64_t>(n_particles)};
+  std::vector<int64_t> shape = {static_cast<int64_t>(n_particles)};
 
   ml_model->SetInputNode(0, species_atomic_number, shape, false, true);
 
@@ -328,11 +329,11 @@ void TorchExportModelDriverImplementation::setDefaultInputs(
   updateNeighborList(modelComputeArguments, n_contributing_atoms);
 
   shape.clear();
-  shape = {static_cast<std::int64_t>(num_neighbors_.size())};
+  shape = {static_cast<int64_t>(num_neighbors_.size())};
   ml_model->SetInputNode(2, num_neighbors_.data(), shape, false, true);
 
   shape.clear();
-  shape = {static_cast<std::int64_t>(neighbor_list.size())};
+  shape = {static_cast<int64_t>(neighbor_list.size())};
   ml_model->SetInputNode(3, neighbor_list.data(), shape, false, true);
 
 
@@ -446,7 +447,7 @@ void TorchExportModelDriverImplementation::setGraphInputs(
 
   // edge_distance_vec and edge_distances
   auto size_edges = graph.size();
-  auto edge_index = std::vector<std::int64_t>(size_edges * 4);
+  auto edge_index = std::vector<int64_t>(size_edges * 4);
   auto edge_distances = std::vector<double>(size_edges);
   auto edge_distances_vec = std::vector<double>(size_edges * 3);
 
@@ -482,7 +483,7 @@ void TorchExportModelDriverImplementation::setGraphInputs(
   int effectiveNumberOfParticlePointers
       = (*numberOfParticlesPointer == 1) ? 2 : *numberOfParticlesPointer;
 
-  std::vector<std::int64_t> shape({effectiveNumberOfParticlePointers, 3});
+  std::vector<int64_t> shape({effectiveNumberOfParticlePointers, 3});
   ml_model->SetInputNode(0, coordinates, shape, false, true);
 
   // Fix for isolated atoms. Append a dummy particle, not in graph
@@ -490,12 +491,12 @@ void TorchExportModelDriverImplementation::setGraphInputs(
   shape = {effectiveNumberOfParticlePointers};
 
   // 2. batch tensor
-  auto batch = std::vector<std::int64_t>(effectiveNumberOfParticlePointers, 0);
+  auto batch = std::vector<int64_t>(effectiveNumberOfParticlePointers, 0);
   ml_model->SetInputNode(1, batch.data(), shape, false, true);
 
 
   // 3. natoms
-  auto natoms = std::vector<std::int64_t> {effectiveNumberOfParticlePointers};
+  auto natoms = std::vector<int64_t> {effectiveNumberOfParticlePointers};
   shape.clear();
   shape = {1};
   ml_model->SetInputNode(2, natoms.data(), shape, false, true);
@@ -507,18 +508,18 @@ void TorchExportModelDriverImplementation::setGraphInputs(
 
   // 5. edge index tensor
   shape.clear();
-  shape = {2, static_cast<std::int64_t>(graph.size())};
+  shape = {2, static_cast<int64_t>(graph.size())};
   ;
   ml_model->SetInputNode(4, edge_index.data(), shape, false, true);
   ;
   // 6. edge distance tensor
   shape.clear();
-  shape = {static_cast<std::int64_t>(graph.size())};
+  shape = {static_cast<int64_t>(graph.size())};
   ml_model->SetInputNode(5, edge_distances.data(), shape, false, true);
 
   // 7. edge distance vector
   shape.clear();
-  shape = {static_cast<std::int64_t>(graph.size()), 3};
+  shape = {static_cast<int64_t>(graph.size()), 3};
   ml_model->SetInputNode(6, edge_distances_vec.data(), shape, false, true);
 }
 
