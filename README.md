@@ -24,11 +24,13 @@ git clone https://github.com/ipcamit/TorchExportModelDriver
 
 ## 1. Install correct Torch env(conda)
 You need torch 2.4.0, and other dependencies. Easiest is to use the provided environment
-file.
+file. Then install torch CPU version manually.
 
 
 ```shell
-conda env create -f TorchExportModelDriver/environment.yml
+conda env create -f TorchExportModelDriver/environment.yaml
+conda activate torchexport
+pip install torch==2.4.0  --index-url https://download.pytorch.org/whl/cpu
 ```
 
 ## 2. Correct KIM env
@@ -50,7 +52,7 @@ export INCLUDE=$INCLUDE:${CONDA_PREFIX}/lib/python3.10/site-packages/torch/inclu
 ```
 
 ## 4. Install the model driver
-Currently you need to provide the `CMAKE_PREFIX_PATH` explicitly. Will be fixed in future versions.
+Currently, you need to provide the `CMAKE_PREFIX_PATH` explicitly. Will be fixed in future versions.
 
 ```shell
 CMAKE_PREFIX_PATH=${CONDA_PREFIX}/lib/python3.10/site-packages/torch/share/cmake kim-api-collections-management install user TorchExportModelDriver
@@ -77,7 +79,7 @@ Success!
 ## 4. Install the model
 The repo contains, an example model,
 ```shell
-cd TorchExportDriver
+cd TorchExportModelDriver
 kim-api-collections-management install user example_model
 ```
 
